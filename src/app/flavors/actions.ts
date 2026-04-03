@@ -30,13 +30,13 @@ async function applyOrder(
   }
 }
 
-export async function createFlavor(formData: FormData) {
+export async function createFlavor(formData: FormData): Promise<string | null> {
   const { supabase, user } = await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const description =
     String(formData.get("description") ?? "").trim() || null;
   if (!name) {
-    throw new Error("Name is required.");
+    return "Name is required.";
   }
 
   const { data, error } = await supabase
@@ -50,7 +50,7 @@ export async function createFlavor(formData: FormData) {
     .single();
 
   if (error) {
-    throw new Error(error.message);
+    return error.message;
   }
 
   revalidatePath("/flavors");

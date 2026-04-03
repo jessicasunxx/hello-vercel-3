@@ -6,12 +6,8 @@ import { createFlavor } from "@/app/flavors/actions";
 export function CreateFlavorForm() {
   const [error, dispatch, pending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
-      try {
-        await createFlavor(formData);
-        return null;
-      } catch (e) {
-        return e instanceof Error ? e.message : String(e);
-      }
+      const result = await createFlavor(formData);
+      return result;
     },
     null,
   );
