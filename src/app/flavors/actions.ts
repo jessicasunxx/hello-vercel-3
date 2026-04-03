@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { runAlmostcrackdChain } from "@/lib/almostcrackd";
+import { generateCaptions } from "@/lib/almostcrackd";
 import { requireAdmin } from "@/lib/require-admin";
 
 const TEMP_OFFSET = 1_000_000;
@@ -222,37 +222,22 @@ export async function moveStep(
 export async function runCaptionTest(flavorId: string, imageUrl: string) {
   const { supabase, user } = await requireAdmin();
 
-  const { data: steps, error: stepsErr } = await supabase
-    .from("humor_flavor_steps")
-    .select("position, prompt")
-    .eq("flavor_id", flavorId)
-    .order("position", { ascending: true });
-
-  if (stepsErr) {
-    return { ok: false as const, error: stepsErr.message };
-  }
-
-  if (!steps?.length) {
-    return {
-      ok: false as const,
-      error: "Add at least one step before running a test.",
-    };
-  }
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
   try {
-    const result = await runAlmostcrackdChain({
+    const result = await generateCaptions({
       imageUrl,
-      steps: steps.map((s) => ({
-        position: s.position,
-        prompt: s.prompt,
-      })),
+      humorFlavorId: flavorId,
+      accessToken: session?.access_token ?? null,
     });
 
     const { error: insErr } = await supabase.from("humor_caption_runs").insert({
       flavor_id: flavorId,
       image_url: imageUrl,
-      request_payload: result.requestPayload as object,
-      response_payload: result.responsePayload as object,
+      request_payload: { image_url: imageUrl, humor_flavor_id: flavorId } as object,
+      response_payload: result.body as object,
       captions_text: result.captionsText,
       created_by: user.id,
     });

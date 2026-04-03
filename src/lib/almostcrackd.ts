@@ -1,106 +1,108 @@
-type StepInput = { position: number; prompt: string };
+/**
+ * Calls the Assignment 5 REST API to generate captions for an image
+ * using a specific humor flavor.
+ *
+ * Required env:
+ *   ALMOSTCRACKD_GENERATE_CAPTIONS_URL — full URL to the caption endpoint
+ *
+ * Optional env:
+ *   ALMOSTCRACKD_API_KEY — static Bearer token
+ *   ALMOSTCRACKD_FORWARD_SUPABASE_TOKEN — set to "1" to forward user JWT
+ */
 
-function joinUrl(base: string, path: string) {
-  const b = base.replace(/\/$/, "");
-  const p = path.startsWith("/") ? path : `/${path}`;
-  return `${b}${p}`;
-}
+export type CaptionResult = {
+  status: number;
+  body: unknown;
+  captionsText: string;
+};
 
-function extractCaptionsText(json: unknown): string {
-  if (json == null) return "";
-  if (typeof json === "string") return json;
+function extractCaptionsText(body: unknown): string {
+  if (body == null) return "";
+  if (typeof body === "string") return body;
 
-  if (typeof json === "object") {
-    const o = json as Record<string, unknown>;
+  if (typeof body === "object") {
+    const o = body as Record<string, unknown>;
 
     if (typeof o.captions === "string") return o.captions;
-    if (Array.isArray(o.captions)) {
+    if (Array.isArray(o.captions))
       return o.captions.map((c) => String(c)).join("\n");
-    }
     if (typeof o.caption === "string") return o.caption;
-
-    if (o.data && typeof o.data === "object") {
-      const d = o.data as Record<string, unknown>;
-      if (typeof d.captions === "string") return d.captions;
-      if (Array.isArray(d.captions)) {
-        return d.captions.map((c) => String(c)).join("\n");
-      }
-      if (typeof d.text === "string") return d.text;
-    }
-
     if (typeof o.text === "string") return o.text;
     if (typeof o.result === "string") return o.result;
-    if (o.result && typeof o.result === "object") {
+
+    if (o.body && typeof o.body === "object") return extractCaptionsText(o.body);
+    if (o.data && typeof o.data === "object") return extractCaptionsText(o.data);
+    if (o.result && typeof o.result === "object")
       return extractCaptionsText(o.result);
-    }
   }
 
   try {
-    return JSON.stringify(json, null, 2);
+    return JSON.stringify(body, null, 2);
   } catch {
-    return String(json);
+    return String(body);
   }
 }
 
-/**
- * Calls the Assignment 5 REST API. Override path and body shape with env if your spec differs.
- */
-export async function runAlmostcrackdChain(input: {
+export async function generateCaptions(input: {
   imageUrl: string;
-  steps: StepInput[];
-}) {
-  const base =
-    process.env.ALMOSTCRACKD_API_BASE_URL?.trim() ||
-    "https://api.almostcrackd.ai";
-  const path =
-    process.env.ALMOSTCRACKD_CAPTION_PATH?.trim() || "/v1/caption-chain";
+  humorFlavorId: string;
+  accessToken?: string | null;
+}): Promise<CaptionResult> {
+  const url = process.env.ALMOSTCRACKD_GENERATE_CAPTIONS_URL?.trim();
+  if (!url) {
+    throw new Error(
+      "Set ALMOSTCRACKD_GENERATE_CAPTIONS_URL in Vercel env vars to your Assignment 5 caption endpoint.",
+    );
+  }
 
-  const url = joinUrl(base, path);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    Accept: "application/json",
   };
 
   const apiKey = process.env.ALMOSTCRACKD_API_KEY?.trim();
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`;
+  } else if (
+    process.env.ALMOSTCRACKD_FORWARD_SUPABASE_TOKEN === "1" &&
+    input.accessToken
+  ) {
+    headers.Authorization = `Bearer ${input.accessToken}`;
   }
 
-  const ordered = [...input.steps].sort((a, b) => a.position - b.position);
-
-  const body = {
+  const payload = {
     image_url: input.imageUrl,
-    steps: ordered.map((s, i) => ({
-      index: i + 1,
-      position: s.position,
-      prompt: s.prompt,
-    })),
+    humor_flavor_id: input.humorFlavorId,
+    imageUrl: input.imageUrl,
+    humorFlavorId: input.humorFlavorId,
   };
 
   const res = await fetch(url, {
     method: "POST",
     headers,
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
+    cache: "no-store",
   });
 
-  const rawText = await res.text();
-  let parsed: unknown;
+  const text = await res.text();
+  let body: unknown = text;
   try {
-    parsed = rawText ? JSON.parse(rawText) : null;
+    body = JSON.parse(text) as unknown;
   } catch {
-    parsed = { raw: rawText };
+    /* keep raw text */
   }
 
   if (!res.ok) {
     const msg =
-      typeof parsed === "object" && parsed && "error" in parsed
-        ? String((parsed as { error: unknown }).error)
-        : rawText || res.statusText;
+      typeof body === "object" && body && "error" in body
+        ? String((body as { error: unknown }).error)
+        : text || res.statusText;
     throw new Error(`AlmostCrackd API ${res.status}: ${msg}`);
   }
 
   return {
-    captionsText: extractCaptionsText(parsed),
-    responsePayload: parsed,
-    requestPayload: body,
+    status: res.status,
+    body,
+    captionsText: extractCaptionsText(body),
   };
 }
