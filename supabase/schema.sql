@@ -1,122 +1,127 @@
 -- Humor prompt-chain tables + RLS for matrix/super admins only.
+-- Safe to re-run: drops and recreates everything.
 -- Run in Supabase SQL editor after your course `profiles` table exists.
 
-create extension if not exists "pgcrypto";
+-- 1. Nuke old tables (CASCADE removes dependent policies, indexes, FKs)
+DROP TABLE IF EXISTS public.humor_caption_runs CASCADE;
+DROP TABLE IF EXISTS public.humor_flavor_steps CASCADE;
+DROP TABLE IF EXISTS public.humor_flavors CASCADE;
 
-create table if not exists public.humor_flavors (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
+-- 2. Create tables fresh
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE public.humor_flavors (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
   description text,
-  created_by uuid references auth.users (id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  created_by uuid REFERENCES auth.users (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-create table if not exists public.humor_flavor_steps (
-  id uuid primary key default gen_random_uuid(),
-  flavor_id uuid not null references public.humor_flavors (id) on delete cascade,
-  position int not null,
+CREATE TABLE public.humor_flavor_steps (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  flavor_id uuid NOT NULL REFERENCES public.humor_flavors (id) ON DELETE CASCADE,
+  position int NOT NULL,
   title text,
-  prompt text not null,
-  created_at timestamptz not null default now(),
-  constraint humor_flavor_steps_position_positive check (position >= 0),
-  constraint humor_flavor_steps_unique_pos unique (flavor_id, position)
+  prompt text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT humor_flavor_steps_position_positive CHECK (position >= 0),
+  CONSTRAINT humor_flavor_steps_unique_pos UNIQUE (flavor_id, position)
 );
 
-create table if not exists public.humor_caption_runs (
-  id uuid primary key default gen_random_uuid(),
-  flavor_id uuid references public.humor_flavors (id) on delete set null,
-  image_url text not null,
+CREATE TABLE public.humor_caption_runs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  flavor_id uuid REFERENCES public.humor_flavors (id) ON DELETE SET NULL,
+  image_url text NOT NULL,
   request_payload jsonb,
   response_payload jsonb,
   captions_text text,
   error text,
-  created_by uuid references auth.users (id) on delete set null,
-  created_at timestamptz not null default now()
+  created_by uuid REFERENCES auth.users (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-create index if not exists humor_flavor_steps_flavor_id_idx
-  on public.humor_flavor_steps (flavor_id);
+-- 3. Indexes
+CREATE INDEX humor_flavor_steps_flavor_id_idx ON public.humor_flavor_steps (flavor_id);
+CREATE INDEX humor_caption_runs_flavor_id_idx ON public.humor_caption_runs (flavor_id);
 
-create index if not exists humor_caption_runs_flavor_id_idx
-  on public.humor_caption_runs (flavor_id);
+-- 4. Enable RLS
+ALTER TABLE public.humor_flavors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.humor_flavor_steps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.humor_caption_runs ENABLE ROW LEVEL SECURITY;
 
-alter table public.humor_flavors enable row level security;
-alter table public.humor_flavor_steps enable row level security;
-alter table public.humor_caption_runs enable row level security;
-
--- Admins only (matches assignment: is_superadmin OR is_matrix_admin)
-
-create policy "humor_flavors_select_admin"
-  on public.humor_flavors for select
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and (p.is_superadmin is true or p.is_matrix_admin is true)
+-- 5. RLS policies (admins only: is_superadmin OR is_matrix_admin)
+CREATE POLICY "humor_flavors_select_admin"
+  ON public.humor_flavors FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.is_superadmin IS TRUE OR p.is_matrix_admin IS TRUE)
     )
   );
 
-create policy "humor_flavors_insert_admin"
-  on public.humor_flavors for insert
-  with check (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and (p.is_superadmin is true or p.is_matrix_admin is true)
+CREATE POLICY "humor_flavors_insert_admin"
+  ON public.humor_flavors FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.is_superadmin IS TRUE OR p.is_matrix_admin IS TRUE)
     )
   );
 
-create policy "humor_flavors_update_admin"
-  on public.humor_flavors for update
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and (p.is_superadmin is true or p.is_matrix_admin is true)
+CREATE POLICY "humor_flavors_update_admin"
+  ON public.humor_flavors FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.is_superadmin IS TRUE OR p.is_matrix_admin IS TRUE)
     )
   );
 
-create policy "humor_flavors_delete_admin"
-  on public.humor_flavors for delete
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and (p.is_superadmin is true or p.is_matrix_admin is true)
+CREATE POLICY "humor_flavors_delete_admin"
+  ON public.humor_flavors FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.is_superadmin IS TRUE OR p.is_matrix_admin IS TRUE)
     )
   );
 
-create policy "humor_flavor_steps_all_admin"
-  on public.humor_flavor_steps for all
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and (p.is_superadmin is true or p.is_matrix_admin is true)
+CREATE POLICY "humor_flavor_steps_all_admin"
+  ON public.humor_flavor_steps FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.is_superadmin IS TRUE OR p.is_matrix_admin IS TRUE)
     )
   )
-  with check (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and (p.is_superadmin is true or p.is_matrix_admin is true)
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.is_superadmin IS TRUE OR p.is_matrix_admin IS TRUE)
     )
   );
 
-create policy "humor_caption_runs_all_admin"
-  on public.humor_caption_runs for all
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and (p.is_superadmin is true or p.is_matrix_admin is true)
+CREATE POLICY "humor_caption_runs_all_admin"
+  ON public.humor_caption_runs FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.is_superadmin IS TRUE OR p.is_matrix_admin IS TRUE)
     )
   )
-  with check (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and (p.is_superadmin is true or p.is_matrix_admin is true)
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.is_superadmin IS TRUE OR p.is_matrix_admin IS TRUE)
     )
   );
