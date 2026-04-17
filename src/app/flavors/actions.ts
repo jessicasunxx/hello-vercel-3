@@ -219,6 +219,69 @@ export async function moveStep(
   revalidatePath(`/flavors/${flavorId}`);
 }
 
+export async function duplicateFlavor(
+  flavorId: string,
+  newName: string,
+): Promise<string | null> {
+  const { supabase, user } = await requireAdmin();
+  const trimmed = newName.trim();
+  if (!trimmed) return "A name is required for the duplicate.";
+
+  const { data: existing, error: checkErr } = await supabase
+    .from("humor_flavors")
+    .select("id")
+    .eq("name", trimmed)
+    .maybeSingle();
+
+  if (checkErr) return checkErr.message;
+  if (existing) return `A flavor named "${trimmed}" already exists. Choose a unique name.`;
+
+  const { data: source, error: srcErr } = await supabase
+    .from("humor_flavors")
+    .select("description")
+    .eq("id", flavorId)
+    .maybeSingle();
+
+  if (srcErr || !source) return srcErr?.message ?? "Source flavor not found.";
+
+  const { data: newFlavor, error: insErr } = await supabase
+    .from("humor_flavors")
+    .insert({
+      name: trimmed,
+      description: source.description,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (insErr) return insErr.message;
+
+  const { data: steps, error: stepErr } = await supabase
+    .from("humor_flavor_steps")
+    .select("position, title, prompt")
+    .eq("flavor_id", flavorId)
+    .order("position", { ascending: true });
+
+  if (stepErr) return stepErr.message;
+
+  if (steps && steps.length > 0) {
+    const { error: copyErr } = await supabase
+      .from("humor_flavor_steps")
+      .insert(
+        steps.map((s) => ({
+          flavor_id: newFlavor.id,
+          position: s.position,
+          title: s.title,
+          prompt: s.prompt,
+        })),
+      );
+    if (copyErr) return copyErr.message;
+  }
+
+  revalidatePath("/flavors");
+  redirect(`/flavors/${newFlavor.id}`);
+}
+
 export async function runCaptionTest(flavorId: string, imageUrl: string) {
   const { supabase, user } = await requireAdmin();
 

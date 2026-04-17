@@ -19,6 +19,12 @@ export default async function FlavorsLayout({
               Humor flavors
             </Link>
             <Link
+              href="/flavors/stats"
+              className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+            >
+              Statistics
+            </Link>
+            <Link
               href="/"
               className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
             >

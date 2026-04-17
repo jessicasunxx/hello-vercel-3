@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createStep, updateFlavor } from "@/app/flavors/actions";
 import { createClient } from "@/lib/supabase/server";
 import { DeleteFlavorButton } from "@/components/delete-flavor-button";
+import { DuplicateFlavorButton } from "@/components/duplicate-flavor-button";
 import { RunTestPanel } from "@/components/run-test-panel";
 import { StepCard } from "@/components/step-card";
 import type { HumorCaptionRun, HumorFlavor, HumorFlavorStep } from "@/types/humor";
@@ -74,7 +75,10 @@ export default async function FlavorDetailPage({ params }: PageProps) {
             </p>
           ) : null}
         </div>
-        <DeleteFlavorButton flavorId={f.id} />
+        <div className="flex items-center gap-2">
+          <DuplicateFlavorButton flavorId={f.id} currentName={f.name} />
+          <DeleteFlavorButton flavorId={f.id} />
+        </div>
       </div>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
