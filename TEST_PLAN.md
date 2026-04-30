@@ -89,8 +89,8 @@ This application is a single Next.js 16 app with three logical "project" areas:
 | # | Step | Expected Result |
 |---|------|-----------------|
 | 1 | Clear cookies / sign out | — |
-| 2 | Navigate to `/flavors` | 307 redirect to `/login` |
-| 3 | Navigate to `/flavors/stats` | 307 redirect to `/login` |
+| 2 | Navigate to `/flavors` | 307 redirect to `/login?next=%2Fflavors` |
+| 3 | Navigate to `/flavors/stats` | 307 redirect to `/login?next=%2Fflavors%2Fstats` |
 | 4 | Navigate to `/flavors/[valid-id]` | 307 redirect to `/login` |
 
 ### Branch 2.6 — Protected Route (Non-Admin User)
@@ -271,7 +271,7 @@ This application is a single Next.js 16 app with three logical "project" areas:
 
 1. **All page renders and HTTP status codes**: Verified `/` (200), `/login` (200), `/unauthorized` (200), `/flavors` (307 redirect when unauthenticated), `/flavors/stats` (307 redirect), `/auth/callback` (307 redirect to login with error=auth when no code provided). All pages render the correct HTML content with expected headings, form fields, and links.
 
-2. **Authentication redirects and admin gating**: Confirmed `requireAdmin()` in the flavors layout correctly redirects unauthenticated users to `/login` and non-admin users to `/unauthorized`. Verified the auth callback route properly handles missing OAuth codes by redirecting to `/login?error=auth`.
+2. **Authentication redirects and admin gating**: Confirmed the proxy middleware and `requireAdmin()` in the flavors layout correctly redirect unauthenticated users to `/login?next=<path>` and non-admin users to `/unauthorized`. Verified the auth callback route properly handles missing OAuth codes by redirecting to `/login?error=auth`.
 
 3. **Full production build verification**: Ran `next build` successfully with zero TypeScript errors and all 9 routes (7 pages + 1 API route + 1 not-found) generated correctly. Verified both static (/, /login, /unauthorized) and dynamic (/flavors, /flavors/[id], /flavors/stats) routes compile.
 
