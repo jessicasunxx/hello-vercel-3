@@ -8,6 +8,7 @@ export function RunTestPanel({ flavorId }: { flavorId: string }) {
   const [imageUrl, setImageUrl] = useState(TEST_IMAGE_URLS[0]?.url ?? "");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   return (
     <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -42,12 +43,15 @@ export function RunTestPanel({ flavorId }: { flavorId: string }) {
             disabled={pending || !imageUrl}
             onClick={() => {
               setMessage(null);
+              setIsSuccess(false);
               startTransition(async () => {
                 const res = await runCaptionTest(flavorId, imageUrl);
                 if (res.ok) {
                   setMessage("Caption run completed. Scroll to caption runs.");
+                  setIsSuccess(true);
                 } else {
                   setMessage(res.error);
+                  setIsSuccess(false);
                 }
               });
             }}
@@ -71,7 +75,7 @@ export function RunTestPanel({ flavorId }: { flavorId: string }) {
 
       {message ? (
         <p
-          className={`mt-3 text-sm ${message.includes("completed") ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
+          className={`mt-3 text-sm ${isSuccess ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
         >
           {message}
         </p>

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createStep, updateFlavor } from "@/app/flavors/actions";
 import { createClient } from "@/lib/supabase/server";
+import { AddStepForm } from "@/components/add-step-form";
 import { DeleteFlavorButton } from "@/components/delete-flavor-button";
 import { DuplicateFlavorButton } from "@/components/duplicate-flavor-button";
+import { EditFlavorForm } from "@/components/edit-flavor-form";
 import { RunTestPanel } from "@/components/run-test-panel";
 import { StepCard } from "@/components/step-card";
 import type { HumorCaptionRun, HumorFlavor, HumorFlavorStep } from "@/types/humor";
@@ -20,7 +21,15 @@ export default async function FlavorDetailPage({ params }: PageProps) {
     .eq("id", id)
     .maybeSingle();
 
-  if (fErr || !flavor) {
+  if (fErr) {
+    return (
+      <p className="text-sm text-red-600 dark:text-red-400">
+        Could not load flavor: {fErr.message}
+      </p>
+    );
+  }
+
+  if (!flavor) {
     notFound();
   }
 
@@ -81,42 +90,7 @@ export default async function FlavorDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-          Edit flavor
-        </h2>
-        <form action={updateFlavor} className="mt-4 space-y-3">
-          <input type="hidden" name="id" value={f.id} />
-          <div>
-            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
-              Name
-            </label>
-            <input
-              name="name"
-              required
-              defaultValue={f.name}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
-              Description
-            </label>
-            <textarea
-              name="description"
-              rows={2}
-              defaultValue={f.description ?? ""}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-          >
-            Save flavor
-          </button>
-        </form>
-      </section>
+      <EditFlavorForm flavor={f} />
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
@@ -146,39 +120,7 @@ export default async function FlavorDetailPage({ params }: PageProps) {
           </ol>
         )}
 
-        <form action={createStep.bind(null, f.id)} className="mt-6 space-y-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-            Add step
-          </h3>
-          <div>
-            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
-              Title (optional)
-            </label>
-            <input
-              name="title"
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950"
-              placeholder="Describe scene"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
-              Prompt
-            </label>
-            <textarea
-              name="prompt"
-              required
-              rows={3}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950"
-              placeholder="Instructions for the model for this chain step"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-          >
-            Add step
-          </button>
-        </form>
+        <AddStepForm flavorId={f.id} />
       </section>
 
       <RunTestPanel flavorId={f.id} />

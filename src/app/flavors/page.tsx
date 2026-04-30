@@ -4,12 +4,20 @@ import { CreateFlavorForm } from "@/components/create-flavor-form";
 import { DeleteFlavorButton } from "@/components/delete-flavor-button";
 import type { HumorFlavor } from "@/types/humor";
 
+type RunAgg = { total: number; success: number };
+
 export default async function FlavorsPage() {
   const supabase = await createClient();
-  const { data: flavors, error } = await supabase
-    .from("humor_flavors")
-    .select("*")
-    .order("updated_at", { ascending: false });
+  const [{ data: flavors, error }, { data: allRuns }] = await Promise.all([
+    supabase
+      .from("humor_flavors")
+      .select("*")
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("humor_caption_runs")
+      .select("flavor_id, error, captions_text")
+      .limit(1000),
+  ]);
 
   if (error) {
     return (
@@ -21,6 +29,15 @@ export default async function FlavorsPage() {
   }
 
   const list = (flavors ?? []) as HumorFlavor[];
+
+  const runStats = new Map<string, RunAgg>();
+  for (const run of allRuns ?? []) {
+    if (!run.flavor_id) continue;
+    const stat = runStats.get(run.flavor_id) ?? { total: 0, success: 0 };
+    stat.total++;
+    if (!run.error && run.captions_text) stat.success++;
+    runStats.set(run.flavor_id, stat);
+  }
 
   return (
     <div className="space-y-10">
@@ -46,35 +63,60 @@ export default async function FlavorsPage() {
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-zinc-200 rounded-xl border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
-            {list.map((f) => (
-              <li
-                key={f.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              >
-                <div>
-                  <Link
-                    href={`/flavors/${f.id}`}
-                    className="font-medium text-zinc-900 hover:underline dark:text-zinc-50"
-                  >
-                    {f.name}
-                  </Link>
-                  {f.description ? (
-                    <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                      {f.description}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link
-                    href={`/flavors/${f.id}`}
-                    className="rounded-md border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-                  >
-                    Open
-                  </Link>
-                  <DeleteFlavorButton flavorId={f.id} />
-                </div>
-              </li>
-            ))}
+            {list.map((f) => {
+              const stats = runStats.get(f.id);
+              const rate =
+                stats && stats.total > 0
+                  ? Math.round((stats.success / stats.total) * 100)
+                  : null;
+              const rateColor =
+                rate === null
+                  ? ""
+                  : rate >= 80
+                    ? "text-emerald-700 dark:text-emerald-400"
+                    : rate >= 50
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-red-600 dark:text-red-400";
+              return (
+                <li
+                  key={f.id}
+                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/flavors/${f.id}`}
+                      className="font-medium text-zinc-900 hover:underline dark:text-zinc-50"
+                    >
+                      {f.name}
+                    </Link>
+                    {f.description ? (
+                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                        {f.description}
+                      </p>
+                    ) : null}
+                    {stats && stats.total > 0 ? (
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        {stats.total} run{stats.total !== 1 ? "s" : ""}{" "}
+                        · <span className={`font-medium ${rateColor}`}>{rate}% success</span>
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+                        No runs yet
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/flavors/${f.id}`}
+                      className="rounded-md border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                    >
+                      Open
+                    </Link>
+                    <DeleteFlavorButton flavorId={f.id} />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

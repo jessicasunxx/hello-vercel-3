@@ -9,7 +9,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/flavors";
+  const rawNext = searchParams.get("next") ?? "/flavors";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/flavors";
   const authError = searchParams.get("error");
 
   const [email, setEmail] = useState("");
@@ -45,12 +46,15 @@ export function LoginForm() {
     router.refresh();
   }
 
+  const [googlePending, setGooglePending] = useState(false);
+
   async function signInWithGoogle() {
     setError(null);
     if (missingEnv) {
       setError("Supabase environment variables are not configured.");
       return;
     }
+    setGooglePending(true);
     const supabase = createClient();
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -60,6 +64,7 @@ export function LoginForm() {
     });
     if (oauthErr) {
       setError(oauthErr.message);
+      setGooglePending(false);
     }
   }
 
@@ -98,8 +103,9 @@ export function LoginForm() {
           <div className="mt-6">
             <button
               type="button"
+              disabled={googlePending || pending}
               onClick={() => void signInWithGoogle()}
-              className="flex w-full items-center justify-center gap-3 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              className="flex w-full items-center justify-center gap-3 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path

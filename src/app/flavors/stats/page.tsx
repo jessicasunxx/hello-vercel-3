@@ -124,14 +124,87 @@ export default async function StatsPage() {
         <StatCard label="Avg caption length" value={`${avgCaptionLength} chars`} />
       </div>
 
-      {/* Per-flavor breakdown */}
+      {/* Per-flavor bar chart */}
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-          Runs by flavor
+          Runs per flavor
         </h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Breakdown of caption generation attempts per humor flavor.
+          Visual breakdown of caption generation volume and success rate by
+          flavor.
         </p>
+        {perFlavorSorted.length === 0 ? (
+          <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+            No data yet.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 space-y-3">
+              {perFlavorSorted.map(([key, data]) => {
+                const maxRuns = perFlavorSorted[0][1].total;
+                const barPct =
+                  maxRuns > 0 ? (data.total / maxRuns) * 100 : 0;
+                const sPct =
+                  data.total > 0
+                    ? Math.round((data.success / data.total) * 100)
+                    : 0;
+                return (
+                  <div key={key}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="mr-2 truncate font-medium text-zinc-800 dark:text-zinc-200">
+                        {key !== "unknown" ? (
+                          <Link
+                            href={`/flavors/${key}`}
+                            className="hover:underline"
+                          >
+                            {data.name}
+                          </Link>
+                        ) : (
+                          data.name
+                        )}
+                      </span>
+                      <span className="whitespace-nowrap tabular-nums text-zinc-500 dark:text-zinc-400">
+                        {data.total} runs · {sPct}% success
+                      </span>
+                    </div>
+                    <div className="h-5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                      <div
+                        className="flex h-full overflow-hidden rounded-full transition-all"
+                        style={{ width: `${barPct}%`, minWidth: barPct > 0 ? "0.75rem" : 0 }}
+                      >
+                        <div
+                          className="bg-emerald-500 dark:bg-emerald-600"
+                          style={{ width: `${sPct}%` }}
+                        />
+                        <div
+                          className="bg-red-400 dark:bg-red-500"
+                          style={{ width: `${100 - sPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500 dark:bg-emerald-600" />{" "}
+                Success
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-red-400 dark:bg-red-500" />{" "}
+                Error
+              </span>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* Per-flavor data table */}
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+          Detailed breakdown
+        </h2>
         {perFlavorSorted.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
             No runs yet.
