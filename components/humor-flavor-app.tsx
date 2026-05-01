@@ -155,6 +155,58 @@ function toStringArray(value: unknown): string[] {
   return [];
 }
 
+function extractAllText(payload: unknown): string[] {
+  if (!payload) return [];
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed && typeof parsed === "object") return extractAllText(parsed);
+    } catch { /* literal string */ }
+    return [trimmed];
+  }
+  if (Array.isArray(payload)) {
+    return payload.flatMap((item) => extractAllText(item));
+  }
+  if (typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    const texts: string[] = [];
+    for (const val of Object.values(record)) {
+      if (typeof val === "string" && val.trim().length > 10) {
+        texts.push(val.trim());
+      } else if (Array.isArray(val) || (val && typeof val === "object")) {
+        texts.push(...extractAllText(val));
+      }
+    }
+    return texts;
+  }
+  return [];
+}
+
+const DESCRIPTION_MIN_LENGTH = 80;
+
+function splitDescriptionAndCaptions(payload: unknown): {
+  description: string | null;
+  captions: string[];
+} {
+  const allText = extractAllText(payload);
+  if (!allText.length) return { description: null, captions: [] };
+
+  const sorted = [...allText].sort((a, b) => b.length - a.length);
+  const longest = sorted[0];
+
+  if (longest && longest.length >= DESCRIPTION_MIN_LENGTH) {
+    const captions = allText.filter((t) => t !== longest);
+    return {
+      description: longest,
+      captions: captions.length > 0 ? captions : [],
+    };
+  }
+
+  return { description: null, captions: allText };
+}
+
 function extractCaptionsFromRecord(record: Record<string, unknown>): string[] {
   for (const key of ["captions", "results", "data", "output", "steps", "response"] as const) {
     const val = record[key];
@@ -282,10 +334,9 @@ function readLocalCaptionRuns(userId: string, flavorId: string): CaptionRun[] {
         continue;
       }
 
+      const split = splitDescriptionAndCaptions(row.raw_response);
       let captions = toStringArray(row.captions);
-      if (!captions.length && row.raw_response) {
-        captions = extractCaptions(row.raw_response);
-      }
+      if (!captions.length) captions = split.captions;
 
       runs.push({
         id,
@@ -293,6 +344,7 @@ function readLocalCaptionRuns(userId: string, flavorId: string): CaptionRun[] {
           typeof row.humor_flavor_id === "string" ? row.humor_flavor_id : flavorId,
         image_name: typeof row.image_name === "string" ? row.image_name : imageId,
         image_id: imageId,
+        image_description: typeof row.image_description === "string" ? row.image_description : split.description,
         captions,
         raw_response: row.raw_response ?? null,
         created_at: toIsoTimestamp(typeof row.created_at === "string" ? row.created_at : null),
@@ -583,15 +635,15 @@ async function fetchCaptionRuns(supabase: SupabaseClient, flavorId: string) {
 
     const fallbackRows = (fallbackResponse.data ?? []) as CaptionRunRow[];
     return fallbackRows.map<CaptionRun>((row) => {
+      const split = splitDescriptionAndCaptions(row.raw_response);
       let captions = toStringArray(row.captions);
-      if (!captions.length && row.raw_response) {
-        captions = extractCaptions(row.raw_response);
-      }
+      if (!captions.length) captions = split.captions;
       return {
         id: String(row.id),
         humor_flavor_id: String(row.humor_flavor_id),
         image_name: row.image_name ?? row.image_id,
         image_id: row.image_id,
+        image_description: split.description,
         captions,
         raw_response: row.raw_response,
         created_at: toIsoTimestamp(row.created_at, row.created_datetime_utc),
@@ -601,15 +653,15 @@ async function fetchCaptionRuns(supabase: SupabaseClient, flavorId: string) {
 
   const rows = (primaryResponse.data ?? []) as CaptionRunRow[];
   return rows.map<CaptionRun>((row) => {
+    const split = splitDescriptionAndCaptions(row.raw_response);
     let captions = toStringArray(row.captions);
-    if (!captions.length && row.raw_response) {
-      captions = extractCaptions(row.raw_response);
-    }
+    if (!captions.length) captions = split.captions;
     return {
       id: String(row.id),
       humor_flavor_id: String(row.humor_flavor_id),
       image_name: row.image_name ?? row.image_id,
       image_id: row.image_id,
+      image_description: split.description,
       captions,
       raw_response: row.raw_response,
       created_at: toIsoTimestamp(row.created_at, row.created_datetime_utc),
@@ -884,6 +936,7 @@ export default function HumorFlavorApp() {
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [pipelineWarning, setPipelineWarning] = useState<string | null>(null);
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
+  const [latestImageDescription, setLatestImageDescription] = useState<string | null>(null);
   const [latestCaptions, setLatestCaptions] = useState<string[]>([]);
   const [latestRawResponse, setLatestRawResponse] = useState<unknown>(null);
 
@@ -1194,6 +1247,7 @@ export default function HumorFlavorApp() {
     setFlavors([]);
     setCaptionRuns([]);
     setSelectedFlavorId(null);
+    setLatestImageDescription(null);
     setLatestCaptions([]);
     setLatestRawResponse(null);
     setPipelineStatus(null);
@@ -1457,6 +1511,7 @@ export default function HumorFlavorApp() {
 
     setSelectedFlavorId(null);
     setCaptionRuns([]);
+    setLatestImageDescription(null);
     setLatestCaptions([]);
     setLatestRawResponse(null);
     setPipelineStatus(null);
@@ -1808,7 +1863,8 @@ export default function HumorFlavorApp() {
         humorFlavorId: selectedFlavor.id,
       });
 
-      const captions = extractCaptions(captionPayload);
+      const { description: imageDescription, captions } = splitDescriptionAndCaptions(captionPayload);
+      setLatestImageDescription(imageDescription);
       setLatestCaptions(captions);
       setLatestRawResponse(captionPayload);
       setPipelineStatus("Caption generation finished.");
@@ -1864,6 +1920,7 @@ export default function HumorFlavorApp() {
           humor_flavor_id: selectedFlavor.id,
           image_name: selectedTestFile.file.name,
           image_id: imageId,
+          image_description: imageDescription,
           captions,
           raw_response: captionPayload,
           created_at: new Date().toISOString(),
@@ -2314,26 +2371,40 @@ export default function HumorFlavorApp() {
                 {pipelineWarning ? <p className="status-warn mt-2">{pipelineWarning}</p> : null}
                 {pipelineError ? <p className="status-error mt-2">{pipelineError}</p> : null}
 
-                {latestCaptions.length > 0 ? (
+                {(latestImageDescription || latestCaptions.length > 0) ? (
                   <div className="mt-5">
-                    <h3 className="text-lg font-semibold">Latest Captions</h3>
+                    <h3 className="text-lg font-semibold">Latest Results</h3>
                     <p className="mt-1 text-xs text-[var(--muted)]">
-                      {latestCaptions.length} caption{latestCaptions.length !== 1 ? "s" : ""} generated
-                      {selectedTestFile ? ` for ${selectedTestFile.file.name}` : ""}
+                      {selectedTestFile ? selectedTestFile.file.name : ""}
                     </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {latestCaptions.map((caption, index) => (
-                        <div
-                          key={`${caption}-${index}`}
-                          className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4"
-                        >
-                          <span className="mb-2 inline-block rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--accent)]">
-                            #{index + 1}
-                          </span>
-                          <p className="text-sm leading-relaxed">{caption}</p>
+
+                    {latestImageDescription ? (
+                      <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Image Description</p>
+                        <p className="text-sm leading-relaxed">{latestImageDescription}</p>
+                      </div>
+                    ) : null}
+
+                    {latestCaptions.length > 0 ? (
+                      <>
+                        <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                          Captions ({latestCaptions.length})
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {latestCaptions.map((caption, index) => (
+                            <div
+                              key={`${caption}-${index}`}
+                              className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4"
+                            >
+                              <span className="mb-2 inline-block rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--accent)]">
+                                #{index + 1}
+                              </span>
+                              <p className="text-sm leading-relaxed">{caption}</p>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -2368,20 +2439,33 @@ export default function HumorFlavorApp() {
                           {new Date(run.created_at).toLocaleString()}
                         </p>
                       </div>
-                      {run.captions.length ? (
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                          {run.captions.map((caption, index) => (
-                            <div
-                              key={`${run.id}-${index}`}
-                              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
-                            >
-                              <span className="mb-1.5 inline-block rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.65rem] font-semibold text-[var(--accent)]">
-                                #{index + 1}
-                              </span>
-                              <p className="text-sm leading-relaxed">{caption}</p>
-                            </div>
-                          ))}
+
+                      {run.image_description ? (
+                        <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                          <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--muted)]">Image Description</p>
+                          <p className="text-sm leading-relaxed">{run.image_description}</p>
                         </div>
+                      ) : null}
+
+                      {run.captions.length ? (
+                        <>
+                          <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                            Captions ({run.captions.length})
+                          </p>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {run.captions.map((caption, index) => (
+                              <div
+                                key={`${run.id}-${index}`}
+                                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                              >
+                                <span className="mb-1.5 inline-block rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.65rem] font-semibold text-[var(--accent)]">
+                                  #{index + 1}
+                                </span>
+                                <p className="text-sm leading-relaxed">{caption}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </>
                       ) : (
                         <p className="text-sm text-[var(--muted)]">No parsed captions found in saved run.</p>
                       )}

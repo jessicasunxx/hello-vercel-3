@@ -31,6 +31,7 @@ export interface CaptionRun {
   humor_flavor_id: string;
   image_name: string;
   image_id: string;
+  image_description: string | null;
   captions: string[];
   raw_response: unknown;
   created_at: string;
