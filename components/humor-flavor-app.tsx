@@ -395,7 +395,6 @@ async function persistStepOrder(
 
 async function fetchFlavorsWithSteps(
   supabase: SupabaseClient,
-  userId: string,
 ) {
   const flavorQueryAttempts = [
     {
@@ -421,11 +420,11 @@ async function fetchFlavorsWithSteps(
   ];
 
   let flavors: FlavorRow[] | null = null;
+  let ownerColumn: string | null = null;
   for (const attempt of flavorQueryAttempts) {
     const response = await supabase
       .from("humor_flavors")
       .select(attempt.select)
-      .eq(attempt.ownerColumn, userId)
       .order(attempt.orderColumn, { ascending: false });
 
     if (response.error) {
@@ -436,6 +435,7 @@ async function fetchFlavorsWithSteps(
     }
 
     flavors = (response.data ?? []) as unknown as FlavorRow[];
+    ownerColumn = attempt.ownerColumn;
     break;
   }
 
@@ -516,10 +516,16 @@ async function fetchFlavorsWithSteps(
       (typeof rawFlavor.slug === "string" && rawFlavor.slug.trim()) ||
       `Flavor ${flavorId}`;
 
+    const createdBy =
+      ownerColumn === "created_by"
+        ? (rawFlavor.created_by ?? null)
+        : (rawFlavor.created_by_user_id ?? null);
+
     return {
       id: flavorId,
       name: displayName,
       description: rawFlavor.description ?? null,
+      created_by: createdBy,
       created_at: toIsoTimestamp(rawFlavor.created_at, rawFlavor.created_datetime_utc),
       updated_at: toIsoTimestamp(
         rawFlavor.updated_at,
@@ -1019,7 +1025,7 @@ export default function HumorFlavorApp() {
     setDataLoading(true);
     setDataError(null);
 
-    void fetchFlavorsWithSteps(supabase, session.user.id)
+    void fetchFlavorsWithSteps(supabase)
       .then((nextFlavors) => {
         if (!active) {
           return;
@@ -2008,21 +2014,29 @@ export default function HumorFlavorApp() {
             {!dataLoading && !flavors.length ? (
               <p className="text-sm text-[var(--muted)]">No humor flavors yet.</p>
             ) : null}
-            {flavors.map((flavor) => (
-              <button
-                key={flavor.id}
-                type="button"
-                onClick={() => setSelectedFlavorId(flavor.id)}
-                className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-                  selectedFlavorId === flavor.id
-                    ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                    : "border-[var(--border)] bg-[var(--surface-muted)] hover:border-[var(--accent)]/60"
-                }`}
-              >
-                <p className="font-medium">{flavor.name}</p>
-                <p className="text-xs text-[var(--muted)]">{flavor.steps.length} step(s)</p>
-              </button>
-            ))}
+            {flavors.map((flavor) => {
+              const isOwn = flavor.created_by === session?.user?.id;
+              return (
+                <button
+                  key={flavor.id}
+                  type="button"
+                  onClick={() => setSelectedFlavorId(flavor.id)}
+                  className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+                    selectedFlavorId === flavor.id
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                      : "border-[var(--border)] bg-[var(--surface-muted)] hover:border-[var(--accent)]/60"
+                  }`}
+                >
+                  <p className="font-medium">{flavor.name}</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {flavor.steps.length} step(s){" "}
+                    <span className="opacity-70">
+                      &middot; {isOwn ? "You" : flavor.created_by ? `#${flavor.created_by.slice(0, 6)}` : "Unknown"}
+                    </span>
+                  </p>
+                </button>
+              );
+            })}
           </div>
         </aside>
 
