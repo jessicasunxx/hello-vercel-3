@@ -2286,13 +2286,25 @@ export default function HumorFlavorApp() {
                 {pipelineError ? <p className="status-error mt-2">{pipelineError}</p> : null}
 
                 {latestCaptions.length > 0 ? (
-                  <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                    <h3 className="font-semibold">Latest Captions</h3>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                  <div className="mt-5">
+                    <h3 className="text-lg font-semibold">Latest Captions</h3>
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {latestCaptions.length} caption{latestCaptions.length !== 1 ? "s" : ""} generated
+                      {selectedTestFile ? ` for ${selectedTestFile.file.name}` : ""}
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {latestCaptions.map((caption, index) => (
-                        <li key={`${caption}-${index}`}>{caption}</li>
+                        <div
+                          key={`${caption}-${index}`}
+                          className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4"
+                        >
+                          <span className="mb-2 inline-block rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--accent)]">
+                            #{index + 1}
+                          </span>
+                          <p className="text-sm leading-relaxed">{caption}</p>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 ) : null}
 
@@ -2316,19 +2328,34 @@ export default function HumorFlavorApp() {
                 {!runsLoading && !runsError && !captionRuns.length ? (
                   <p className="mt-2 text-sm text-[var(--muted)]">No caption runs saved yet for this flavor.</p>
                 ) : null}
-                <div className="mt-3 space-y-3">
+                <div className="mt-3 space-y-5">
                   {captionRuns.map((run) => (
                     <article key={run.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                      <p className="text-xs text-[var(--muted)]">
-                        {new Date(run.created_at).toLocaleString()} • {run.image_name}
-                      </p>
-                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                        {run.captions.length ? (
-                          run.captions.map((caption, index) => <li key={`${run.id}-${index}`}>{caption}</li>)
-                        ) : (
-                          <li>No parsed captions found in saved run.</li>
-                        )}
-                      </ul>
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-[var(--muted)]">
+                          {run.image_name}
+                        </p>
+                        <p className="text-xs text-[var(--muted)] opacity-70">
+                          {new Date(run.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      {run.captions.length ? (
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {run.captions.map((caption, index) => (
+                            <div
+                              key={`${run.id}-${index}`}
+                              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                            >
+                              <span className="mb-1.5 inline-block rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.65rem] font-semibold text-[var(--accent)]">
+                                #{index + 1}
+                              </span>
+                              <p className="text-sm leading-relaxed">{caption}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-[var(--muted)]">No parsed captions found in saved run.</p>
+                      )}
                     </article>
                   ))}
                 </div>
