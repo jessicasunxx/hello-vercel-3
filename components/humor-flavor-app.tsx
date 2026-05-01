@@ -155,6 +155,30 @@ function toStringArray(value: unknown): string[] {
   return [];
 }
 
+function extractCaptionsFromRecord(record: Record<string, unknown>): string[] {
+  for (const key of ["captions", "results", "data", "output", "steps", "response"] as const) {
+    const val = record[key];
+    if (Array.isArray(val) && val.length > 0) {
+      const extracted = extractCaptions(val);
+      if (extracted.length > 0) return extracted;
+    }
+    if (typeof val === "string" && val.trim()) {
+      return [val.trim()];
+    }
+  }
+
+  const direct =
+    (typeof record.caption === "string" && record.caption.trim()) ||
+    (typeof record.text === "string" && record.text.trim()) ||
+    (typeof record.generated_caption === "string" && record.generated_caption.trim()) ||
+    (typeof record.description === "string" && record.description.trim()) ||
+    (typeof record.content === "string" && record.content.trim()) ||
+    (typeof record.message === "string" && record.message.trim());
+  if (direct) return [direct];
+
+  return [];
+}
+
 function extractCaptions(payload: unknown): string[] {
   if (!payload) {
     return [];
@@ -162,7 +186,14 @@ function extractCaptions(payload: unknown): string[] {
 
   if (typeof payload === "string") {
     const trimmed = payload.trim();
-    return trimmed ? [trimmed] : [];
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed && typeof parsed === "object") {
+        return extractCaptions(parsed);
+      }
+    } catch { /* not JSON, treat as literal caption */ }
+    return [trimmed];
   }
 
   if (Array.isArray(payload)) {
@@ -172,21 +203,7 @@ function extractCaptions(payload: unknown): string[] {
       }
 
       if (item && typeof item === "object") {
-        const record = item as Record<string, unknown>;
-        const direct =
-          (typeof record.caption === "string" && record.caption.trim()) ||
-          (typeof record.text === "string" && record.text.trim()) ||
-          (typeof record.output === "string" && record.output.trim()) ||
-          (typeof record.generated_caption === "string" && record.generated_caption.trim());
-        if (direct) {
-          return [direct];
-        }
-
-        if (Array.isArray(record.captions)) {
-          return record.captions
-            .map((entry) => (typeof entry === "string" ? entry.trim() : String(entry).trim()))
-            .filter(Boolean);
-        }
+        return extractCaptionsFromRecord(item as Record<string, unknown>);
       }
 
       return [];
@@ -196,12 +213,7 @@ function extractCaptions(payload: unknown): string[] {
   }
 
   if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    if (Array.isArray(record.captions)) {
-      return record.captions
-        .map((entry) => (typeof entry === "string" ? entry.trim() : String(entry).trim()))
-        .filter(Boolean);
-    }
+    return extractCaptionsFromRecord(payload as Record<string, unknown>);
   }
 
   return [];
@@ -270,13 +282,18 @@ function readLocalCaptionRuns(userId: string, flavorId: string): CaptionRun[] {
         continue;
       }
 
+      let captions = toStringArray(row.captions);
+      if (!captions.length && row.raw_response) {
+        captions = extractCaptions(row.raw_response);
+      }
+
       runs.push({
         id,
         humor_flavor_id:
           typeof row.humor_flavor_id === "string" ? row.humor_flavor_id : flavorId,
         image_name: typeof row.image_name === "string" ? row.image_name : imageId,
         image_id: imageId,
-        captions: toStringArray(row.captions),
+        captions,
         raw_response: row.raw_response ?? null,
         created_at: toIsoTimestamp(typeof row.created_at === "string" ? row.created_at : null),
       });
@@ -565,27 +582,39 @@ async function fetchCaptionRuns(supabase: SupabaseClient, flavorId: string) {
     }
 
     const fallbackRows = (fallbackResponse.data ?? []) as CaptionRunRow[];
-    return fallbackRows.map<CaptionRun>((row) => ({
+    return fallbackRows.map<CaptionRun>((row) => {
+      let captions = toStringArray(row.captions);
+      if (!captions.length && row.raw_response) {
+        captions = extractCaptions(row.raw_response);
+      }
+      return {
+        id: String(row.id),
+        humor_flavor_id: String(row.humor_flavor_id),
+        image_name: row.image_name ?? row.image_id,
+        image_id: row.image_id,
+        captions,
+        raw_response: row.raw_response,
+        created_at: toIsoTimestamp(row.created_at, row.created_datetime_utc),
+      };
+    });
+  }
+
+  const rows = (primaryResponse.data ?? []) as CaptionRunRow[];
+  return rows.map<CaptionRun>((row) => {
+    let captions = toStringArray(row.captions);
+    if (!captions.length && row.raw_response) {
+      captions = extractCaptions(row.raw_response);
+    }
+    return {
       id: String(row.id),
       humor_flavor_id: String(row.humor_flavor_id),
       image_name: row.image_name ?? row.image_id,
       image_id: row.image_id,
-      captions: toStringArray(row.captions),
+      captions,
       raw_response: row.raw_response,
       created_at: toIsoTimestamp(row.created_at, row.created_datetime_utc),
-    }));
-  }
-
-  const rows = (primaryResponse.data ?? []) as CaptionRunRow[];
-  return rows.map<CaptionRun>((row) => ({
-    id: String(row.id),
-    humor_flavor_id: String(row.humor_flavor_id),
-    image_name: row.image_name ?? row.image_id,
-    image_id: row.image_id,
-    captions: toStringArray(row.captions),
-    raw_response: row.raw_response,
-    created_at: toIsoTimestamp(row.created_at, row.created_datetime_utc),
-  }));
+    };
+  });
 }
 
 function isAdminProfile(profile: Profile | null) {
