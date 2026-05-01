@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Humor Flavor Tool
 
-## Getting Started
+Admin-only prompt-chain manager for creating and testing humor flavors against the AlmostCrackd staging pipeline API.
 
-First, run the development server:
+## Features
+
+- Google OAuth sign-in gate
+- Admin gate: app works only when `profiles.is_superadmin = true` or `profiles.is_matrix_admin = true`
+- Humor flavor CRUD:
+  - Create, duplicate, update, delete flavors
+- Humor flavor step CRUD:
+  - Create, update, delete steps
+  - Reorder steps (move up / move down)
+- Caption testing:
+  - Build an image test set from uploaded files
+  - Call the required 4-step API flow:
+    1. `POST /pipeline/generate-presigned-url`
+    2. `PUT` image bytes to presigned URL
+    3. `POST /pipeline/upload-image-from-url`
+    4. `POST /pipeline/generate-captions` (with `humorFlavorId`)
+- Caption history:
+  - Save generated captions per flavor
+  - Read caption runs for selected flavor
+- Theme modes:
+  - Light / Dark / System
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- React 19
+- Supabase JS (`@supabase/supabase-js` + `@supabase/ssr`)
+
+## Local Setup
+
+1. Install deps:
+
+```bash
+npm install
+```
+
+2. Create `.env.local` from `.env.example` and fill values:
+
+```bash
+cp .env.example .env.local
+```
+
+Required env vars:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_ALMOSTCRACKD_API_BASE_URL` (default `https://api.almostcrackd.ai`)
+- Optional: `NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN` (force OAuth callback origin)
+
+3. Enable Google auth in Supabase:
+
+- In Supabase Auth providers, enable Google.
+- Add callback URLs in Supabase Auth redirect URL allow list:
+  - `http://localhost:3000/auth/callback`
+  - `https://<your-domain>/auth/callback`
+
+4. Run SQL in Supabase:
+
+- Execute [`supabase/schema.sql`](./supabase/schema.sql) in your Supabase SQL editor.
+- This creates `humor_flavors`, `humor_flavor_steps`, `humor_flavor_caption_runs`, plus admin-only RLS policies.
+
+5. Start dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Deployment Checklist
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Create a new GitHub repo and push this project.
+2. Create a new Vercel project from that repo.
+3. Add the same env vars in Vercel project settings.
+4. Deploy.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Notes
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- The app uses the logged-in Supabase session JWT as the `Authorization: Bearer <token>` header for `api.almostcrackd.ai`.
+- Supported test image file types:
+  - `image/jpeg`, `image/jpg`, `image/png`, `image/webp`, `image/gif`, `image/heic`
